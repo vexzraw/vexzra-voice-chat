@@ -1,5 +1,5 @@
 // Configuración inicial
-const socket = io('https://tu-backend-en-render.onrender.com'); // Reemplazar con URL de Render al desplegar
+const socket = io('https://vexzra-voice-chat.onrender.com'); // Reemplazar con URL de Render al desplegar
 let localStream;
 let isMicActive = false;
 let myUsername = localStorage.getItem('vexzra_username') || '';

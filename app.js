@@ -1,12 +1,19 @@
 // Configuración inicial
-const socket = io('https://vexzra-voice-chat.onrender.com'); // Reemplazar con URL de Render al desplegar
+const socket = io('https://vexzra-voice-chat.onrender.com'); // Reemplazar si procede
 let localStream;
 let isMicActive = false;
 let myUsername = localStorage.getItem('vexzra_username') || '';
-let peers = {}; 
+let peers = {}; // { [peerId]: { pc, audioEl, name } }
+let mySocketId = null;
 let recordedChunks = [];
 let mediaRecorder;
 const MAX_USERS = 5;
+
+socket.on('connect', () => {
+    mySocketId = socket.id;
+    console.log('Connected to signaling server, id=', mySocketId);
+});
+
 
 // Atajo de teclado 'A' doble click
 let lastAPressTime = 0;
@@ -117,75 +124,150 @@ function simulateSpeakingUI(username, isSpeaking) {
     }
 }
 
-socket.on('user_speaking', (data) => {
-    simulateSpeakingUI(data.user, data.status);
+// Cuando recibimos la lista de usuarios, renderizamos y creamos conexiones si corresponde
+socket.on('room_users', (users) => {
+    renderAvatars(users.slice(0, MAX_USERS));
+    ensurePeerConnections(users);
 });
 
-// Lógica de Renderizado de Avatares en Círculo
-function renderAvatars(users) {
-    const container = document.getElementById('avatar-circle');
-    container.innerHTML = ''; // Clear
-    
-    const radius = 120; // Radio del círculo
-    const step = (2 * Math.PI) / users.length;
-    
-    users.forEach((user, index) => {
-        const angle = index * step - Math.PI / 2;
-        const x = Math.round(radius * Math.cos(angle));
-        const y = Math.round(radius * Math.sin(angle));
-        
-        const wrapper = document.createElement('div');
-        wrapper.className = 'avatar-wrapper';
-        wrapper.id = `avatar-wrapper-${user.name}`;
-        wrapper.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-        
-        wrapper.innerHTML = `
-            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=${user.name}" class="avatar" alt="${user.name}">
-            <div class="username-label">${user.name}</div>
-            <input type="range" class="vol-slider" min="0" max="1" step="0.1" value="1" onchange="changeVolume('${user.name}', this.value)">
-        `;
-        container.appendChild(wrapper);
+// Cuando un usuario nuevo entra, los miembros existentes deberían iniciar una oferta hacia él
+socket.on('new_user', (user) => {
+    // Si yo ya tengo una conexión con él, ignorar
+    if (user.id === mySocketId) return;
+    if (!peers[user.id]) {
+        // Soy miembro existente => inicio la offer al nuevo usuario
+        createPeerConnection(user.id, user.name, true);
+    }
+});
+
+// Señalización entrante: OFFER
+socket.on('offer', async (data) => {
+    const fromId = data.from;
+    const offer = data.offer;
+    if (!peers[fromId]) {
+        createPeerConnection(fromId, data.name || 'remote', false);
+    }
+    const pc = peers[fromId].pc;
+    try {
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', { to: fromId, answer: pc.localDescription });
+    } catch (err) {
+        console.error('Error handling offer', err);
+    }
+});
+
+// Señalización entrante: ANSWER
+socket.on('answer', async (data) => {
+    const fromId = data.from;
+    const answer = data.answer;
+    const pc = peers[fromId] && peers[fromId].pc;
+    if (!pc) return;
+    try {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    } catch (err) {
+        console.error('Error applying answer', err);
+    }
+});
+
+// Señalización entrante: ICE candidate
+socket.on('ice_candidate', async (data) => {
+    const fromId = data.from;
+    const candidate = data.candidate;
+    const pc = peers[fromId] && peers[fromId].pc;
+    if (!pc) return;
+    try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+        console.warn('Error adding received ICE candidate', err);
+    }
+});
+
+function ensurePeerConnections(users) {
+    users.forEach((user) => {
+        if (user.id === mySocketId) return;
+        if (!peers[user.id]) {
+            // Decide who inicia: hacemos que los que ya estaban inicien ofertando al que se une
+            // Si quieres otra lógica, puedes usar timestamps. Aquí, si mi id < user.id, no iniciar (determinístico).
+            // Para simplicidad: no iniciar aquí; espera 'new_user' o que otro inicie.
+        }
     });
 }
 
-function changeVolume(username, value) {
-    // Aquí se conectaría la lógica del Web Audio API o HTMLAudioElement
-    // Ej: audioElements[username].volume = value;
-    console.log(`Volumen de ${username} ajustado a ${value}`);
-}
+function createPeerConnection(peerId, peerName, isInitiator) {
+    if (!localStream) {
+        console.warn('Local stream not ready yet');
+        return;
+    }
+    const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
 
-// Grabación de Llamada Local
-function toggleRecording() {
-    const btn = document.getElementById('record-btn');
-    if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-        btn.innerHTML = '🔴 Grabar Llamada';
-        btn.classList.remove('active');
-    } else {
-        if (!localStream) return alert('No hay stream de audio activo.');
-        
-        // NOTA: Para un MVP, graba solo el micrófono local.
-        // Mezclar audio remoto requiere Web Audio API (MediaStreamDestination).
-        mediaRecorder = new MediaRecorder(localStream);
-        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
-        mediaRecorder.onstop = () => {
-            const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `vexzra-record-${new Date().getTime()}.webm`;
-            document.body.appendChild(a);
-            a.click();
-            URL.revokeObjectURL(url);
-            recordedChunks = [];
-        };
-        mediaRecorder.start();
-        btn.innerHTML = '⏹️ Detener Grabación';
-        btn.classList.add('active');
+    const remoteStream = new MediaStream();
+
+    // Crear <audio> para reproducir el stream remoto
+    const audio = document.createElement('audio');
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.controls = false;
+    audio.dataset.peer = peerId;
+    audio.style.display = 'none'; // puedes insertarlo en avatar-wrapper si quieres controles UI
+    document.body.appendChild(audio);
+
+    pc.ontrack = (event) => {
+        // event.streams[0] suele existir y es más fiable
+        const stream = event.streams && event.streams[0] ? event.streams[0] : null;
+        if (stream) {
+            audio.srcObject = stream;
+        } else {
+            // fallback: añadir pistas manualmente
+            event.track && remoteStream.addTrack(event.track);
+            audio.srcObject = remoteStream;
+        }
+    };
+
+    pc.onicecandidate = (e) => {
+        if (e.candidate) {
+            socket.emit('ice_candidate', { to: peerId, candidate: e.candidate });
+        }
+    };
+
+    // Añadir pistas locales (aunque deshabilitadas por defecto para push-to-talk)
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    peers[peerId] = { pc, audioEl: audio, name: peerName };
+
+    if (isInitiator) {
+        pc.createOffer().then(offer => {
+            return pc.setLocalDescription(offer);
+        }).then(() => {
+            socket.emit('offer', { to: peerId, offer: pc.localDescription });
+        }).catch(err => console.error('Error creating offer', err));
     }
 }
 
+// Helper para cerrar y limpiar peer
+function closePeer(peerId) {
+    const p = peers[peerId];
+    if (!p) return;
+    try {
+        p.pc.close();
+    } catch (e) {}
+    if (p.audioEl && p.audioEl.parentNode) p.audioEl.parentNode.removeChild(p.audioEl);
+    delete peers[peerId];
+}
+
+// Helper para cerrar y limpiar peer
+function closePeer(peerId) {
+    const p = peers[peerId];
+    if (!p) return;
+    try {
+        p.pc.close();
+    } catch (e) {}
+    if (p.audioEl && p.audioEl.parentNode) p.audioEl.parentNode.removeChild(p.audioEl);
+    delete peers[peerId];
+}
 // Websockets Dummy Data para Visualización (WebRTC requiere ICE Servers en prod)
 function joinRoom(roomName) {
     socket.emit('join', { username: myUsername, room: roomName });

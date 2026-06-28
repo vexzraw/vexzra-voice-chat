@@ -162,4 +162,37 @@ body {
 /* Animaciones */
 @keyframes waveBackground { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes popIn { 0% { opacity: 0; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
-      
+
+/* Añade a style.css si no tienes reglas equivalentes */
+.circle-container {
+    position: relative;
+    width: 360px;    /* ajusta al tamaño que quieras */
+    height: 360px;   /* ajusta al tamaño que quieras */
+    margin: 0 auto;
+}
+.avatar-wrapper {
+    width: 88px;     /* tamaño del avatar */
+    text-align: center;
+    transform-origin: center center;
+}
+.avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: block;
+    margin: 0 auto;
+}
+.username-label {
+    font-size: 12px;
+    margin-top: 6px;
+    color: #fff;
+}
+.vol-slider {
+    width: 70px;
+    margin-top: 6px;
+}
+.avatar-wrapper.speaking {
+    box-shadow: 0 0 18px rgba(255,200,0,0.9);
+    transform: scale(1.05);
+    z-index: 5;
+}

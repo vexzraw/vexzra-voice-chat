@@ -14,25 +14,23 @@ socket.on('connect', () => {
     console.log('Connected to signaling server, id=', mySocketId);
 });
 
-
-// Atajo de teclado 'A' doble click
+// --- UI y modales (mantener tu código existente) ---
 let lastAPressTime = 0;
 document.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'a') {
         const currentTime = new Date().getTime();
-        if (currentTime - lastAPressTime < 400) { // 400ms para doble pulsación
+        if (currentTime - lastAPressTime < 400) {
             toggleMic();
-            lastAPressTime = 0; // Reset
+            lastAPressTime = 0;
         } else {
             lastAPressTime = currentTime;
         }
     }
 });
 
-// Cerrar modales clickeando fuera
 document.addEventListener('click', (e) => {
     const welcome = document.getElementById('welcome-modal');
-    if (!welcome.classList.contains('hidden') && !welcome.contains(e.target) && e.target.tagName !== 'BUTTON') {
+    if (welcome && !welcome.classList.contains('hidden') && !welcome.contains(e.target) && e.target.tagName !== 'BUTTON') {
         closeModal('welcome-modal');
         checkUsername();
     }
@@ -48,7 +46,8 @@ window.onload = () => {
 };
 
 function closeModal(id) {
-    document.getElementById(id).classList.add('hidden');
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
     if(id === 'welcome-modal') checkUsername();
 }
 
@@ -74,10 +73,11 @@ async function requestMic() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         // Desactivar audio por defecto (Push to talk)
-        localStream.getAudioTracks()[0].enabled = false; 
+        if (localStream.getAudioTracks().length) localStream.getAudioTracks()[0].enabled = false;
         closeModal('welcome-modal');
     } catch (err) {
         alert('Se necesita el micrófono para el Walkie Talkie.');
+        console.error(err);
     }
 }
 
@@ -90,7 +90,8 @@ function showMainApp() {
 function toggleMic() {
     if (!localStream) return;
     isMicActive = !isMicActive;
-    localStream.getAudioTracks()[0].enabled = isMicActive;
+    const track = localStream.getAudioTracks()[0];
+    if (track) track.enabled = isMicActive;
     
     const btn = document.getElementById('mic-btn');
     if (isMicActive) {
@@ -106,48 +107,149 @@ function toggleMic() {
     }
 }
 
-// Interfaz Gráfica: Hablando
 function simulateSpeakingUI(username, isSpeaking) {
-    const wrapper = document.getElementById(`avatar-wrapper-${username}`);
+    // Intenta buscar por socket-id primero, luego por nombre
+    let wrapper = document.querySelector(`#avatar-wrapper-${CSS.escape(username)}`) || document.querySelector(`[data-name="${CSS.escape(username)}"]`);
+    if (!wrapper) {
+        // intenta por socket id en caso de que username sea socketId
+        wrapper = document.querySelector(`#avatar-wrapper-${username}`);
+    }
     const area = document.querySelector('.chat-area');
     
     if (wrapper) {
         if (isSpeaking) {
             wrapper.classList.add('speaking');
-            area.classList.add('someone-speaking');
+            area && area.classList.add('someone-speaking');
         } else {
             wrapper.classList.remove('speaking');
             if(document.querySelectorAll('.avatar-wrapper.speaking').length === 0) {
-                area.classList.remove('someone-speaking');
+                area && area.classList.remove('someone-speaking');
             }
         }
     }
 }
 
-// Cuando recibimos la lista de usuarios, renderizamos y creamos conexiones si corresponde
-socket.on('room_users', (users) => {
-    renderAvatars(users.slice(0, MAX_USERS));
-    ensurePeerConnections(users);
+socket.on('user_speaking', (data) => {
+    simulateSpeakingUI(data.user, data.status);
 });
 
-// Cuando un usuario nuevo entra, los miembros existentes deberían iniciar una oferta hacia él
+// --- Renderizado de avatares robusto (usa socket id para ids DOM) ---
+function renderAvatars(users) {
+    const container = document.getElementById('avatar-circle');
+    if (!container) return;
+    container.innerHTML = ''; // limpiamos y reconstruimos
+
+    if (!users || users.length === 0) return;
+
+    const radius = 120;
+    const step = (2 * Math.PI) / users.length;
+
+    users.forEach((user, index) => {
+        const angle = index * step - Math.PI / 2;
+        const x = Math.round(radius * Math.cos(angle));
+        const y = Math.round(radius * Math.sin(angle));
+
+        // Usa socket id para id del wrapper (evita espacios/char problemáticos)
+        const wrapper = document.createElement('div');
+        wrapper.className = 'avatar-wrapper';
+        wrapper.id = `avatar-wrapper-${user.id}`;
+        wrapper.dataset.userId = user.id;
+        wrapper.dataset.name = user.name;
+        wrapper.style.position = 'absolute';
+        wrapper.style.left = '50%';
+        wrapper.style.top = '50%';
+        wrapper.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+
+        // Imagen de avatar (escapa el seed)
+        const seed = encodeURIComponent(user.name || user.id);
+        const img = document.createElement('img');
+        img.className = 'avatar';
+        img.alt = user.name;
+        img.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${seed}`;
+
+        // Label con nombre
+        const label = document.createElement('div');
+        label.className = 'username-label';
+        label.textContent = user.name === myUsername ? `${user.name} (tú)` : user.name;
+
+        // Contenedor audio dentro del avatar
+        let audio = document.querySelector(`audio[data-peer="${user.id}"]`);
+        if (!audio) {
+            audio = document.createElement('audio');
+            audio.autoplay = true;
+            audio.playsInline = true;
+            audio.controls = false;
+            audio.dataset.peer = user.id;
+            audio.style.width = '0';
+            audio.style.height = '0';
+            audio.style.opacity = '0';
+            // no lo ocultamos con display:none porque algunos navegadores bloquean autoplay si no está en DOM visible
+        }
+
+        // Slider de volumen
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'vol-slider';
+        slider.min = 0;
+        slider.max = 1;
+        slider.step = 0.05;
+        slider.value = 1;
+        slider.oninput = (ev) => {
+            const v = parseFloat(ev.target.value);
+            audio.volume = v;
+        };
+
+        wrapper.appendChild(img);
+        wrapper.appendChild(label);
+        wrapper.appendChild(slider);
+        wrapper.appendChild(audio);
+
+        container.appendChild(wrapper);
+
+        // Si ya tengo una pc para ese peer, asegúrate de vincular el audioEl
+        if (peers[user.id]) {
+            peers[user.id].audioEl = audio;
+            // si el peer ya tiene remoteStream, re-attach:
+            if (peers[user.id].remoteStream) {
+                audio.srcObject = peers[user.id].remoteStream;
+            }
+        }
+    });
+}
+
+// Cambios de volumen (API simple)
+function changeVolume(usernameOrId, value) {
+    // Busca audio por data-peer (id) o por nombre
+    const audio = document.querySelector(`audio[data-peer="${usernameOrId}"]`) || document.querySelector(`#avatar-wrapper-${usernameOrId} audio`);
+    if (audio) audio.volume = parseFloat(value);
+}
+
+// --- WebRTC: signaling handlers (offer/answer/ice) ---
+socket.on('room_users', (users) => {
+    // renderiza primero
+    renderAvatars(users.slice(0, MAX_USERS));
+    // crea conexiones si corresponde (no iniciamos automáticamente aquí)
+});
+
 socket.on('new_user', (user) => {
-    // Si yo ya tengo una conexión con él, ignorar
-    if (user.id === mySocketId) return;
-    if (!peers[user.id]) {
-        // Soy miembro existente => inicio la offer al nuevo usuario
-        createPeerConnection(user.id, user.name, true);
-    }
+    // Solo los que ya estaban conectados deberían iniciar la offer hacia el nuevo
+    if (!mySocketId || user.id === mySocketId) return;
+    // Si ya existe peer, no crear otra
+    if (peers[user.id]) return;
+    // Crea una conexión y genera offer (soy "iniciador")
+    createPeerConnection(user.id, user.name, true);
 });
 
 // Señalización entrante: OFFER
 socket.on('offer', async (data) => {
     const fromId = data.from;
     const offer = data.offer;
+    const name = data.name || 'remote';
     if (!peers[fromId]) {
-        createPeerConnection(fromId, data.name || 'remote', false);
+        createPeerConnection(fromId, name, false);
     }
-    const pc = peers[fromId].pc;
+    const pc = peers[fromId] && peers[fromId].pc;
+    if (!pc) return console.warn('PC no encontrado al recibir offer', fromId);
     try {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
@@ -184,46 +286,43 @@ socket.on('ice_candidate', async (data) => {
     }
 });
 
-function ensurePeerConnections(users) {
-    users.forEach((user) => {
-        if (user.id === mySocketId) return;
-        if (!peers[user.id]) {
-            // Decide who inicia: hacemos que los que ya estaban inicien ofertando al que se une
-            // Si quieres otra lógica, puedes usar timestamps. Aquí, si mi id < user.id, no iniciar (determinístico).
-            // Para simplicidad: no iniciar aquí; espera 'new_user' o que otro inicie.
-        }
-    });
-}
-
 function createPeerConnection(peerId, peerName, isInitiator) {
     if (!localStream) {
-        console.warn('Local stream not ready yet');
+        console.warn('Local stream not ready yet; solicitando micrófono...');
+        // intenta pedir el micrófono y continuar cuando haya stream
+        requestMic().then(() => createPeerConnection(peerId, peerName, isInitiator));
         return;
     }
-    const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
+    if (peers[peerId]) {
+        console.log('Peer ya existe', peerId);
+        return;
+    }
 
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     const remoteStream = new MediaStream();
 
-    // Crear <audio> para reproducir el stream remoto
-    const audio = document.createElement('audio');
-    audio.autoplay = true;
-    audio.playsInline = true;
-    audio.controls = false;
-    audio.dataset.peer = peerId;
-    audio.style.display = 'none'; // puedes insertarlo en avatar-wrapper si quieres controles UI
-    document.body.appendChild(audio);
+    // Busca audio dentro del avatar-wrapper si existe (renderAvatars lo crea)
+    let audioEl = document.querySelector(`audio[data-peer="${peerId}"]`);
+    if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        audioEl.controls = false;
+        audioEl.dataset.peer = peerId;
+        document.body.appendChild(audioEl);
+    }
 
     pc.ontrack = (event) => {
-        // event.streams[0] suele existir y es más fiable
-        const stream = event.streams && event.streams[0] ? event.streams[0] : null;
+        // preferimos event.streams[0] cuando existe
+        const stream = (event.streams && event.streams[0]) ? event.streams[0] : null;
         if (stream) {
-            audio.srcObject = stream;
+            audioEl.srcObject = stream;
+            peers[peerId].remoteStream = stream;
         } else {
-            // fallback: añadir pistas manualmente
-            event.track && remoteStream.addTrack(event.track);
-            audio.srcObject = remoteStream;
+            // fallback: añadir pista a remoteStream
+            if (event.track) remoteStream.addTrack(event.track);
+            audioEl.srcObject = remoteStream;
+            peers[peerId].remoteStream = remoteStream;
         }
     };
 
@@ -233,47 +332,57 @@ function createPeerConnection(peerId, peerName, isInitiator) {
         }
     };
 
-    // Añadir pistas locales (aunque deshabilitadas por defecto para push-to-talk)
+    // Añadir pistas locales
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    peers[peerId] = { pc, audioEl: audio, name: peerName };
+    peers[peerId] = { pc, audioEl, name: peerName, remoteStream };
 
     if (isInitiator) {
-        pc.createOffer().then(offer => {
-            return pc.setLocalDescription(offer);
-        }).then(() => {
-            socket.emit('offer', { to: peerId, offer: pc.localDescription });
-        }).catch(err => console.error('Error creating offer', err));
+        pc.createOffer().then(offer => pc.setLocalDescription(offer))
+          .then(() => {
+              socket.emit('offer', { to: peerId, offer: pc.localDescription, name: myUsername });
+          }).catch(err => console.error('Error creating offer', err));
     }
 }
 
-// Helper para cerrar y limpiar peer
 function closePeer(peerId) {
     const p = peers[peerId];
     if (!p) return;
-    try {
-        p.pc.close();
-    } catch (e) {}
+    try { p.pc.close(); } catch (e) {}
     if (p.audioEl && p.audioEl.parentNode) p.audioEl.parentNode.removeChild(p.audioEl);
     delete peers[peerId];
 }
 
-// Helper para cerrar y limpiar peer
-function closePeer(peerId) {
-    const p = peers[peerId];
-    if (!p) return;
-    try {
-        p.pc.close();
-    } catch (e) {}
-    if (p.audioEl && p.audioEl.parentNode) p.audioEl.parentNode.removeChild(p.audioEl);
-    delete peers[peerId];
+// Grabación de llamada local (mantén tu implementación)
+function toggleRecording() {
+    const btn = document.getElementById('record-btn');
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        btn.innerHTML = '🔴 Grabar Llamada';
+        btn.classList.remove('active');
+    } else {
+        if (!localStream) return alert('No hay stream de audio activo.');
+        mediaRecorder = new MediaRecorder(localStream);
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `vexzra-record-${new Date().getTime()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            recordedChunks = [];
+        };
+        mediaRecorder.start();
+        btn.innerHTML = '⏹️ Detener Grabación';
+        btn.classList.add('active');
+    }
 }
-// Websockets Dummy Data para Visualización (WebRTC requiere ICE Servers en prod)
+
+// Websockets: unirse a sala
 function joinRoom(roomName) {
     socket.emit('join', { username: myUsername, room: roomName });
 }
-
-socket.on('room_users', (users) => {
-    // Si hay más de 5, idealmente se bloquea en backend
-    renderAvatars(users.slice(0, MAX_USERS));
-});

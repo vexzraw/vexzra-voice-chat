@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vexzra Voice Chat 🌍✨</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="bokeh-background"></div>
+    <div class="lens-flare"></div>
+
+    <div id="welcome-modal" class="modal glass">
+        <span class="close-btn" onclick="closeModal('welcome-modal')">✖</span>
+        <h2>Bienvenido a vexzra voice chat 🌍✨</h2>
+        <p>Por favor habilita los permisos de micrófono para este sitio web y que comience la reunión 🗣️</p>
+        <button class="glass-btn" onclick="requestMic()">Aceptar y Continuar</button>
+    </div>
+
+    <div id="username-modal" class="modal glass hidden">
+        <h2>Elige tu nombre de usuario</h2>
+        <input type="text" id="username-input" class="glass-input" placeholder="Tu apodo aquí...">
+        <button class="glass-btn" onclick="saveUsername()">Entrar</button>
+    </div>
+
+    <div class="app-container glass hidden" id="main-app">
+        
+        <aside class="sidebar glass">
+            <h3>🌐 Red Local</h3>
+            <ul id="room-list">
+                <li onclick="joinRoom('general')">Sala General</li>
+                <li onclick="joinRoom('juegos')">Sala de Juegos</li>
+            </ul>
+            <div class="recording-controls">
+                <button class="glass-btn small" id="record-btn" onclick="toggleRecording()">🔴 Grabar Llamada</button>
+            </div>
+        </aside>
+
+        <main class="chat-area">
+            <div class="circle-container" id="avatar-circle">
+                </div>
+        </main>
+
+        <footer class="controls glass">
+            <button id="mic-btn" class="glass-btn mic-btn" onclick="toggleMic()">
+                🎤 Hablar (Push to Talk)
+            </button>
+            <p class="hint">Presiona la tecla 'A' dos veces para activar/desactivar</p>
+        </footer>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

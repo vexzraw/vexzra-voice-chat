@@ -1,0 +1,165 @@
+/* Importar Segoe UI u otra fuente similar del sistema */
+@import url('https://fonts.googleapis.com/css2?family=Segoe+UI&display=swap');
+
+:root {
+    --glass-bg: rgba(255, 255, 255, 0.25);
+    --glass-border: rgba(255, 255, 255, 0.5);
+    --primary-blue: #0088ff;
+    --vibrant-green: #39ff14;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+}
+
+body {
+    height: 100vh;
+    overflow: hidden;
+    background: radial-gradient(circle at top left, #a0d8ef, #0052cc, #0088ff, #7fdbba);
+    background-size: 200% 200%;
+    animation: waveBackground 15s ease infinite;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Efectos de cámara y orgánicos */
+.bokeh-background {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-image: 
+        radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 0%, transparent 10%),
+        radial-gradient(circle at 80% 60%, rgba(255,255,255,0.2) 0%, transparent 15%),
+        radial-gradient(circle at 50% 80%, rgba(127, 219, 186, 0.4) 0%, transparent 20%);
+    filter: blur(8px);
+    z-index: -1;
+}
+
+.lens-flare {
+    position: absolute;
+    top: -50px; right: 10%; width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, transparent 60%);
+    border-radius: 50%;
+    filter: blur(5px);
+    z-index: -1;
+}
+
+/* Skeuomorfismo y Glass */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2), inset 0 1px 2px rgba(255,255,255,0.8);
+    border-radius: 20px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Modales */
+.modal {
+    position: absolute;
+    z-index: 100;
+    padding: 30px;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal h2 { margin-bottom: 15px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+.modal p { margin-bottom: 20px; font-size: 0.9rem; }
+.close-btn { position: absolute; top: 15px; right: 20px; cursor: pointer; font-size: 1.2rem; }
+
+/* Botones e Inputs Web 2.0 Gloss */
+.glass-btn {
+    background: linear-gradient(to bottom, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.2) 100%);
+    border: 1px solid var(--glass-border);
+    border-radius: 25px;
+    padding: 10px 25px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1), inset 0 2px 4px rgba(255,255,255,0.8);
+    transition: all 0.2s ease;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.glass-btn:hover { background: linear-gradient(to bottom, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.3) 100%); transform: translateY(-2px); }
+.glass-btn.active { box-shadow: 0 0 20px var(--vibrant-green), inset 0 2px 4px rgba(255,255,255,0.8); border-color: var(--vibrant-green); }
+
+.glass-input {
+    width: 100%; padding: 10px; margin-bottom: 20px;
+    background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border);
+    border-radius: 10px; outline: none; font-size: 1rem;
+}
+
+/* Layout Principal */
+.app-container {
+    width: 90vw; height: 90vh; max-width: 1200px;
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    grid-template-rows: 1fr 80px;
+    gap: 15px; padding: 15px;
+}
+
+@media (max-width: 768px) {
+    .app-container { grid-template-columns: 1fr; grid-template-rows: auto 1fr 80px; height: 95vh; }
+}
+
+.sidebar { padding: 20px; grid-row: 1 / 3; display: flex; flex-direction: column; }
+@media (max-width: 768px) { .sidebar { grid-row: 1 / 2; flex-direction: row; justify-content: space-between; padding: 10px; } }
+
+#room-list { list-style: none; margin-top: 15px; flex-grow: 1;}
+#room-list li { padding: 10px; margin-bottom: 5px; cursor: pointer; border-radius: 10px; transition: background 0.2s; }
+#room-list li:hover { background: rgba(255,255,255,0.2); }
+
+/* Área de Avatares (Disposición Circular) */
+.chat-area { display: flex; justify-content: center; align-items: center; position: relative; }
+.circle-container { position: relative; width: 300px; height: 300px; border-radius: 50%; }
+
+.avatar-wrapper {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+.avatar {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff, #ccc);
+    border: 3px solid rgba(255,255,255,0.8);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    object-fit: cover;
+    transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+}
+
+/* Estado Oscurecido (cuando otro habla) */
+.chat-area.someone-speaking .avatar-wrapper:not(.speaking) .avatar { filter: brightness(0.5); transform: scale(0.9); }
+
+/* Estado Hablando */
+.avatar-wrapper.speaking .avatar {
+    transform: scale(1.2);
+    box-shadow: 0 0 25px var(--vibrant-green), 0 0 10px var(--vibrant-green) inset;
+    border-color: var(--vibrant-green);
+}
+.username-label { margin-top: 8px; font-size: 0.9rem; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+.vol-slider { width: 60px; height: 5px; margin-top: 5px; cursor: pointer; }
+
+/* Controles Base */
+.controls { grid-column: 2 / 3; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+@media (max-width: 768px) { .controls { grid-column: 1 / 2; } }
+
+.mic-btn { font-size: 1.2rem; padding: 15px 40px; border-radius: 30px; }
+.hint { font-size: 0.75rem; margin-top: 5px; opacity: 0.8; }
+
+/* Animaciones */
+@keyframes waveBackground { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes popIn { 0% { opacity: 0; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
+      

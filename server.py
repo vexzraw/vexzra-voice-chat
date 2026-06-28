@@ -20,7 +20,8 @@ def handle_join(data):
     
     join_room(room)
     
-    if room not কক্ষ in rooms_data:
+    # Aquí estaba el error. Debe quedar así:
+    if room not in rooms_data:
         rooms_data[room] = []
         
     # Limitar a 5 personas por sala

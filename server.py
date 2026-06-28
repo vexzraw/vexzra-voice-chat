@@ -52,5 +52,5 @@ def test_disconnect():
 
 if __name__ == '__main__':
     # Usar eventlet o gevent en producción (Render lo hace vía gunicorn)
-    socketio.run(app, host='0.0.0.0', port=5000, deb
-ug=True)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host='0.0.0.0', port=port)
